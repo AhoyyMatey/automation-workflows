@@ -1,0 +1,475 @@
+{
+  "name": "Monitor domain expiry, SSL and email security in Google Sheets",
+  "nodes": [
+    {
+      "id": "5d0c6a1e-2f3b-4c4d-8e9f-0a1b2c3d4e01",
+      "name": "Every Monday at 8:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "typeVersion": 1.2
+    },
+    {
+      "id": "5d0c6a1e-2f3b-4c4d-8e9f-0a1b2c3d4e02",
+      "name": "Domains and settings",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d1",
+              "name": "domains",
+              "type": "array",
+              "value": "=[\"stripe.com\", \"notion.com\", \"ycombinator.com\", \"example.com\", \"this-domain-is-not-registered-12345.com\"]"
+            },
+            {
+              "id": "d2",
+              "name": "warnDays",
+              "type": "number",
+              "value": 30
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "5d0c6a1e-2f3b-4c4d-8e9f-0a1b2c3d4e03",
+      "name": "Check domains (Apify)",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "url": "https://api.apify.com/v2/acts/rsiddiq95~domain-intelligence/run-sync-get-dataset-items",
+        "method": "POST",
+        "options": {
+          "timeout": 300000
+        },
+        "jsonBody": "={{ JSON.stringify({ domains: $json.domains, includeDns: true, includeWebsite: true, includeWayback: false }) }}",
+        "sendBody": true,
+        "sendQuery": true,
+        "specifyBody": "json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "timeout",
+              "value": "290"
+            },
+            {
+              "name": "clean",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "typeVersion": 4.2
+    },
+    {
+      "id": "5d0c6a1e-2f3b-4c4d-8e9f-0a1b2c3d4e04",
+      "name": "Domain reports only",
+      "type": "n8n-nodes-base.filter",
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "f1",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.resultType }}",
+              "rightValue": "domain"
+            }
+          ]
+        }
+      },
+      "typeVersion": 2.2
+    },
+    {
+      "id": "5d0c6a1e-2f3b-4c4d-8e9f-0a1b2c3d4e05",
+      "name": "Sheet columns and issues",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "Domain",
+              "type": "string",
+              "value": "={{ $json.domain }}"
+            },
+            {
+              "id": "c2",
+              "name": "Issues",
+              "type": "string",
+              "value": "={{ [$json.registered === false ? 'not registered' : null, $json.daysToExpiry != null && $json.daysToExpiry <= $('Domains and settings').first().json.warnDays ? 'domain expires in ' + $json.daysToExpiry + ' days' : null, $json.sslDaysLeft != null && $json.sslDaysLeft <= $('Domains and settings').first().json.warnDays ? 'SSL expires in ' + $json.sslDaysLeft + ' days' : null, $json.registered !== false && $json.sslValid === false ? 'SSL certificate not trusted' : null, $json.registered !== false && $json.mxHosts?.length && !$json.hasSpf ? 'no SPF record' : null, $json.registered !== false && $json.mxHosts?.length && (!$json.dmarcPolicy || $json.dmarcPolicy === 'none') ? 'DMARC not enforced' : null, $json.registered !== false && ($json.httpStatus == null || $json.httpStatus >= 400) ? 'website not answering (' + ($json.httpStatus ?? 'no response') + ')' : null].filter(Boolean).join('; ') || 'OK' }}"
+            },
+            {
+              "id": "c3",
+              "name": "Registrar",
+              "type": "string",
+              "value": "={{ $json.registrar }}"
+            },
+            {
+              "id": "c4",
+              "name": "Domain expires",
+              "type": "string",
+              "value": "={{ $json.expiresAt?.slice(0, 10) }}"
+            },
+            {
+              "id": "c5",
+              "name": "Days to expiry",
+              "type": "string",
+              "value": "={{ $json.daysToExpiry }}"
+            },
+            {
+              "id": "c6",
+              "name": "SSL expires",
+              "type": "string",
+              "value": "={{ $json.sslValidTo?.slice(0, 10) }}"
+            },
+            {
+              "id": "c7",
+              "name": "SSL days left",
+              "type": "string",
+              "value": "={{ $json.sslDaysLeft }}"
+            },
+            {
+              "id": "c8",
+              "name": "Email provider",
+              "type": "string",
+              "value": "={{ $json.mailProvider }}"
+            },
+            {
+              "id": "c9",
+              "name": "SPF",
+              "type": "string",
+              "value": "={{ $json.hasSpf ? 'yes' : 'no' }}"
+            },
+            {
+              "id": "c10",
+              "name": "DMARC policy",
+              "type": "string",
+              "value": "={{ $json.dmarcPolicy ?? 'missing' }}"
+            },
+            {
+              "id": "c11",
+              "name": "HTTP status",
+              "type": "string",
+              "value": "={{ $json.httpStatus }}"
+            },
+            {
+              "id": "c12",
+              "name": "Final URL",
+              "type": "string",
+              "value": "={{ $json.finalUrl }}"
+            },
+            {
+              "id": "c13",
+              "name": "Last checked",
+              "type": "string",
+              "value": "={{ $now.toISODate() }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "5d0c6a1e-2f3b-4c4d-8e9f-0a1b2c3d4e06",
+      "name": "Update Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "columns": {
+          "value": {},
+          "schema": [
+            {
+              "id": "Domain",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "Domain",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Issues",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "Issues",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Registrar",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "Registrar",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Domain expires",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "Domain expires",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Days to expiry",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "Days to expiry",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "SSL expires",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "SSL expires",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "SSL days left",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "SSL days left",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email provider",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "Email provider",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "SPF",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "SPF",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "DMARC policy",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "DMARC policy",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "HTTP status",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "HTTP status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Final URL",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "Final URL",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last checked",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "displayName": "Last checked",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ],
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "Domain"
+          ]
+        },
+        "options": {},
+        "operation": "appendOrUpdate",
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gid=0"
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": ""
+        }
+      },
+      "typeVersion": 4.5
+    },
+    {
+      "id": "5d0c6a1e-2f3b-4c4d-8e9f-0a1b2c3d4e07",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -500,
+        -220
+      ],
+      "parameters": {
+        "width": 440,
+        "height": 600,
+        "content": "## Monitor your domains every week\nEvery Monday this checks a list of domains and keeps one row per domain in a Google Sheet: registrar and expiry, SSL certificate expiry, email provider, SPF and DMARC, and website status. An **Issues** column flags what needs attention, or says **OK**.\n\nUseful for agencies and IT teams that look after many domains, and for anyone who has been caught out by an expired domain or certificate.\n\n### Setup (3 minutes)\n1. **Apify token:** sign up free at apify.com and copy your API token (Settings → API & Integrations). In **Check domains**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_TOKEN`.\n2. **Domains and settings:** list your domains and set `warnDays` (how many days ahead to warn about expiry).\n3. **Update Google Sheet:** connect Google and pick a sheet whose first row has these headers: Domain, Issues, Registrar, Domain expires, Days to expiry, SSL expires, SSL days left, Email provider, SPF, DMARC policy, HTTP status, Final URL, Last checked. After picking the tab, set Mapping Column Mode back to *Map Automatically* and Column to match on to *Domain* (see note 2).\n\nCost: about $5 per 1,000 domain checks on Apify (the free plan's monthly credit covers small lists)."
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "5d0c6a1e-2f3b-4c4d-8e9f-0a1b2c3d4e08",
+      "name": "Note: check domains",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        380,
+        -330
+      ],
+      "parameters": {
+        "width": 440,
+        "height": 300,
+        "content": "### 1. Check the domains\nRuns the Domain Intelligence Actor on Apify and waits for the results (up to 5 minutes, which covers a few hundred domains). Registration data comes from RDAP, the official successor to WHOIS; some country domains (for example .io and .es) don't publish it, so their registrar and expiry stay empty.\n\n**If it fails:** a wrong token, a timeout or an Apify outage fails the execution, and the sheet is left as it was.\n\nEntries that aren't domain names come back as error rows; **Domain reports only** drops them."
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "5d0c6a1e-2f3b-4c4d-8e9f-0a1b2c3d4e09",
+      "name": "Note: flag issues and update sheet",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        860,
+        -330
+      ],
+      "parameters": {
+        "width": 420,
+        "height": 300,
+        "content": "### 2. Flag issues and update the sheet\n**Issues** lists any of: not registered, domain or SSL expiring within `warnDays`, untrusted certificate, no SPF record, DMARC missing or set to none (only for domains that receive email), website not answering. Otherwise it says OK.\n\nRows are matched on **Domain**, so each run updates the same row; new domains add rows.\n\n**After picking the tab**, n8n resets the mapping: set **Mapping Column Mode** back to *Map Automatically* and **Column to match on** to *Domain*."
+      },
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "connections": {
+    "Domain reports only": {
+      "main": [
+        [
+          {
+            "node": "Sheet columns and issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Domains and settings": {
+      "main": [
+        [
+          {
+            "node": "Check domains (Apify)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Monday at 8:00": {
+      "main": [
+        [
+          {
+            "node": "Domains and settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check domains (Apify)": {
+      "main": [
+        [
+          {
+            "node": "Domain reports only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheet columns and issues": {
+      "main": [
+        [
+          {
+            "node": "Update Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
